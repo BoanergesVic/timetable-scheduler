@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Timetable Scheduler – Distance Learning Programmes</title>
+<style>
+body{font-family:system-ui,Arial,sans-serif;margin:0;background:#f5f6f8;color:#1b1f24}
+header{background:#1f3a5f;color:#fff;padding:16px 24px}header h1{margin:0;font-size:1.25rem}
+main{max-width:1150px;margin:20px auto;padding:0 16px}
+.card{background:#fff;border-radius:8px;padding:16px;margin-bottom:16px;box-shadow:0 1px 3px #0002}
+label{font-size:.85rem;margin-right:12px}input,select{padding:6px;margin:4px 12px 4px 4px}
+button{background:#1f3a5f;color:#fff;border:0;border-radius:6px;padding:8px 16px;cursor:pointer}
+button:disabled{opacity:.5}table{border-collapse:collapse;width:100%;font-size:.85rem}
+th,td{border:1px solid #d5d9df;padding:5px 7px;text-align:left}th{background:#e8edf4;position:sticky;top:0}
+.ok{color:#0a7a2f;font-weight:600}.bad{color:#b00020;font-weight:600}.kv span{display:inline-block;margin-right:18px}
+#tablewrap{max-height:520px;overflow:auto}
+</style></head><body>
+<header><h1>Automated Timetable Scheduler for Distance Learning Programmes</h1></header>
+<main>
+<div class="card"><b>Generate a timetable</b><br>
+<label>Population size<input id="pop" type="number" value="150" min="20" max="400"></label>
+<label>Courses<input id="courses" type="number" value="120" min="20" max="150"></label>
+<label>Lecturers<input id="lect" type="number" value="42" min="10" max="60"></label>
+<label>Random seed<input id="seed" type="number" value="1" min="0"></label>
+<button id="go">Generate</button> <span id="status"></span></div>
+<div class="card kv" id="meta" style="display:none"></div>
+<div class="card" id="viewcard" style="display:none"><b>View</b><br>
+<label>Cohort<select id="fcohort"><option value="">All</option></select></label>
+<label>Lecturer<select id="flect"><option value="">All</option></select></label>
+<label>Venue<select id="fven"><option value="">All</option></select></label>
+<label>Day<select id="fday"><option value="">All</option><option>Fri</option><option>Sat</option><option>Sun</option></select></label>
+<a href="/api/export.csv"><button type="button">Export CSV</button></a>
+<div id="tablewrap"><table><thead><tr><th>Day</th><th>Time</th><th>Course</th><th>Session</th><th>Lecturer</th><th>Cohorts</th><th>Venue</th><th>Mode</th></tr></thead><tbody id="rows"></tbody></table></div></div>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+async function load(){
+  const q=new URLSearchParams();
+  for(const [k,id] of [["cohort","fcohort"],["lecturer","flect"],["venue","fven"],["day","fday"]]) if($(id).value) q.set(k,$(id).value);
+  const r=await fetch("/api/timetable?"+q); if(!r.ok) return; const d=await r.json();
+  $("rows").innerHTML=d.rows.map(x=>`<tr><td>${x.day}</td><td>${x.time}</td><td>${x.course}</td><td>${x.session}</td><td>${x.lecturer}</td><td>${x.cohorts}</td><td>${x.venue}</td><td>${x.modality}</td></tr>`).join("");
+  const m=d.meta; $("meta").style.display="block";
+  $("meta").innerHTML=`<span>Sessions scheduled: <b>${m.sessions}</b></span><span>Hard-constraint violations: <b class="${m.hard_violations==0?"ok":"bad"}">${m.hard_violations}</b></span><span>Independent conflict check: <b class="${m.independent_check_conflicts==0?"ok":"bad"}">${m.independent_check_conflicts} conflicts</b></span><span>Fitness: <b>${m.fitness}</b></span><span>Penalty: <b>${m.penalty}</b></span><span>Generations: <b>${m.generations}</b></span><span>Time: <b>${m.seconds}s</b></span>`;
+}
+async function lists(){
+  const d=await (await fetch("/api/lists")).json();
+  for(const [id,arr] of [["fcohort",d.cohorts],["flect",d.lecturers],["fven",d.venues]]){
+    const s=$(id); s.innerHTML='<option value="">All</option>'+arr.map(x=>`<option>${x}</option>`).join("");}
+}
+$("go").onclick=async()=>{
+  $("go").disabled=true; $("status").textContent="Running the scheduler…";
+  const r=await fetch("/api/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({population:+$("pop").value,courses:+$("courses").value,lecturers:+$("lect").value,seed:+$("seed").value})});
+  $("go").disabled=false;
+  if(!r.ok){$("status").textContent="Error: "+(await r.json()).detail;return;}
+  $("status").textContent="Done."; $("viewcard").style.display="block"; await lists(); await load();
+};
+for(const id of ["fcohort","flect","fven","fday"]) $(id).onchange=load;
+</script></body></html>
